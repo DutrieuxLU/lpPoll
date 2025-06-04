@@ -43,7 +43,11 @@ type RankingResponse struct {
 
 // Mock data for development
 
-var votes []Vote
+var (
+	votes []Vote
+	teams []Team
+	db    *sql.DB
+)
 
 const (
 	host     = "localhost"
@@ -53,12 +57,38 @@ const (
 	dbname   = "postgres"   // Default database, or your specific database
 )
 
+func loadFromDB() error {
+	// Load teams
+	rows, err := db.Query("SELECT id, name, region FROM teams ORDER BY name")
+	if err != nil {
+		return fmt.Errorf("failed to query teams: %v", err)
+	}
+	defer rows.Close()
+
+	teams = []Team{} // Clear existing teams
+	for rows.Next() {
+		var team Team
+		if err = rows.Scan(&team.ID, &team.Name, &team.Region); err != nil {
+			return fmt.Errorf("failed to scan team: %v", err)
+		}
+		teams = append(teams, team)
+	}
+
+	if err = rows.Err(); err != nil {
+		return fmt.Errorf("error iterating teams: %v", err)
+	}
+
+	log.Printf("Loaded %d teams and %d votes from database", len(teams), len(votes))
+	return nil
+}
+
 func main() {
+	var err error
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		host, port, user, password, dbname)
 
 	// Open a connection
-	db, err := sql.Open("postgres", psqlInfo)
+	db, err = sql.Open("postgres", psqlInfo)
 	if err != nil {
 		log.Fatal("Failed to open a DB connection: ", err)
 	}
@@ -71,6 +101,12 @@ func main() {
 	}
 
 	fmt.Println("Successfully connected to PostgreSQL!")
+	if len(teams) == 0 {
+		err = loadFromDB()
+		if err != nil {
+			log.Fatal("UNABLE TO LOAD FROM REMOTE DB", err)
+		}
+	}
 	// Create Gin router
 	r := gin.Default()
 
