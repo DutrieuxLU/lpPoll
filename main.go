@@ -42,13 +42,6 @@ type RankingResponse struct {
 }
 
 // Mock data for development
-var teams = []Team{
-	{ID: 1, Name: "T1", Region: "LCK"},
-	{ID: 2, Name: "Gen.G", Region: "LCK"},
-	{ID: 3, Name: "JDG", Region: "LPL"},
-	{ID: 4, Name: "BLG", Region: "LPL"},
-	{ID: 5, Name: "G2", Region: "LEC"},
-}
 
 var votes []Vote
 
@@ -105,7 +98,6 @@ func main() {
 		api.GET("/rankings/week/:week", getRankingsByWeek)
 	}
 
-	// StatusOKtart server
 	err = r.Run(":8080")
 	if err != nil {
 		log.Fatal("Local server couldn't start")
