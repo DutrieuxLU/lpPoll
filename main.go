@@ -121,7 +121,6 @@ func submitRanking(c *gin.Context) {
 	// Clear existing votes for this voter and week
 	votes = removeVotes(votes, submission.VoterID, submission.Week)
 
-	// Add new votes
 	for rank, teamID := range submission.Teams {
 		vote := Vote{
 			ID:       len(votes) + 1,
