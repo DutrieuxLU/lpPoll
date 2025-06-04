@@ -1,12 +1,15 @@
 package main
 
 import (
+	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	_ "github.com/lib/pq"
 )
 
 type Team struct {
@@ -49,7 +52,32 @@ var teams = []Team{
 
 var votes []Vote
 
+const (
+	host     = "localhost"
+	port     = 5431
+	user     = "postgres"   // Default PostgreSQL user
+	password = "secretpass" // The password you set
+	dbname   = "postgres"   // Default database, or your specific database
+)
+
 func main() {
+	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		host, port, user, password, dbname)
+
+	// Open a connection
+	db, err := sql.Open("postgres", psqlInfo)
+	if err != nil {
+		log.Fatal("Failed to open a DB connection: ", err)
+	}
+	defer db.Close()
+
+	// Ping the database to verify connection
+	err = db.Ping()
+	if err != nil {
+		log.Fatal("Failed to ping DB: ", err)
+	}
+
+	fmt.Println("Successfully connected to PostgreSQL!")
 	// Create Gin router
 	r := gin.Default()
 
@@ -77,8 +105,8 @@ func main() {
 		api.GET("/rankings/week/:week", getRankingsByWeek)
 	}
 
-	// Start server
-	err := r.Run(":8080")
+	// StatusOKtart server
+	err = r.Run(":8080")
 	if err != nil {
 		log.Fatal("Local server couldn't start")
 	}
