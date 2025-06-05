@@ -1,4 +1,4 @@
 Welcome to my project!
 
 ## Database Structure -- 
-[Postgres Structure](web/DBstruct.svg)
+[document.pdf](https://github.com/user-attachments/files/20601171/document.pdf)
