@@ -50,11 +50,11 @@ var (
 )
 
 const (
-	host     = "localhost"
-	port     = 5431
-	user     = "postgres"   // Default PostgreSQL user
-	password = "secretpass" // The password you set
-	dbname   = "postgres"   // Default database, or your specific database
+	host     = "lppoll-freedb.cz4oskg6qyk9.us-east-2.rds.amazonaws.com"
+	port     = 5432
+	user     = "postgres"        // Default PostgreSQL user
+	password = "Fisher2019,PULL" // The password you set
+	dbname   = "postgres"        // Default database, or your specific database
 )
 
 func loadFromDB() error {
@@ -84,7 +84,7 @@ func loadFromDB() error {
 
 func main() {
 	var err error
-	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=require",
 		host, port, user, password, dbname)
 
 	// Open a connection
