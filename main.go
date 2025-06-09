@@ -182,7 +182,7 @@ func submitRanking(c *gin.Context) {
 			ID:       len(votes) + 1,
 			VoterID:  submission.VoterID,
 			TeamID:   teamID,
-			Rank:     rank + 1, // rank starts at 1, not 0
+			Rank:     rank + 1, // 1-indexed
 			Week:     submission.Week,
 			CreateAt: time.Now(),
 		}
@@ -262,7 +262,6 @@ func calculateRankings(week int) []RankingResponse {
 		}
 	}
 
-	// Sort by points (descending)
 	for i := 0; i < len(rankings)-1; i++ {
 		for j := i + 1; j < len(rankings); j++ {
 			if rankings[j].Points > rankings[i].Points {
@@ -271,7 +270,6 @@ func calculateRankings(week int) []RankingResponse {
 		}
 	}
 
-	// Assign ranks
 	for i := range rankings {
 		rankings[i].Rank = i + 1
 	}
@@ -281,13 +279,7 @@ func calculateRankings(week int) []RankingResponse {
 
 // Helper function to remove existing votes
 func removeVotes(allVotes []Vote, voterID, week int) []Vote {
-	var filtered []Vote
-	for _, vote := range allVotes {
-		if !(vote.VoterID == voterID && vote.Week == week) {
-			filtered = append(filtered, vote)
-		}
-	}
-	return filtered
+	return nil
 }
 
 func max(a, b int) int {
