@@ -1,3 +1,4 @@
+// cmd/database.go
 package cmd
 
 import (
@@ -83,7 +84,7 @@ func (ds *DatabaseService) loadVoters() error {
 }
 
 func (ds *DatabaseService) loadVotes() error {
-	rows, err := ds.db.Query("SELECT id, voter_id, team_id, rank, week, created_at FROM votes ORDER BY week DESC, voter_id, rank")
+	rows, err := ds.db.Query("SELECT id, voter_id, team_id, poll_period_id, rank_position, created_at FROM votes ORDER BY poll_period_id DESC, voter_id, rank_position")
 	if err != nil {
 		return fmt.Errorf("failed to query votes: %v", err)
 	}
@@ -92,7 +93,7 @@ func (ds *DatabaseService) loadVotes() error {
 	ds.votes = []Vote{} // Clear existing votes
 	for rows.Next() {
 		var vote Vote
-		if err = rows.Scan(&vote.ID, &vote.VoterID, &vote.TeamID, &vote.Rank, &vote.Week, &vote.CreateAt); err != nil {
+		if err = rows.Scan(&vote.ID, &vote.VoterID, &vote.TeamID, &vote.PollPeriodID, &vote.RankPosition, &vote.CreatedAt); err != nil {
 			return fmt.Errorf("failed to scan vote: %v", err)
 		}
 		ds.votes = append(ds.votes, vote)
@@ -114,16 +115,16 @@ func (ds *DatabaseService) GetVotes() []Vote {
 }
 
 func (ds *DatabaseService) CreateVoter(name, email, role string) (*Voter, error) {
-	query := `INSERT INTO voters (name, email, role, active, created_at) 
-			  VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`
+	// Since role has a default value and created_at has CURRENT_TIMESTAMP default,
+	// we can let the database handle those if not specified
+	query := `INSERT INTO voters (name, email, role) 
+			  VALUES ($1, $2, $3) RETURNING id, role, active, created_at`
 
 	var voter Voter
 	voter.Name = name
 	voter.Email = email
-	voter.Role = role
-	voter.Active = true
 
-	err := ds.db.QueryRow(query, name, email, role, true, time.Now()).Scan(&voter.ID, &voter.CreatedAt)
+	err := ds.db.QueryRow(query, name, email, role).Scan(&voter.ID, &voter.Role, &voter.Active, &voter.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create voter: %v", err)
 	}
@@ -134,7 +135,7 @@ func (ds *DatabaseService) CreateVoter(name, email, role string) (*Voter, error)
 	return &voter, nil
 }
 
-func (ds *DatabaseService) SubmitRanking(voterID, week int, teams []int) error {
+func (ds *DatabaseService) SubmitRanking(voterID, pollPeriodID int, teams []int) error {
 	// Start transaction
 	tx, err := ds.db.Begin()
 	if err != nil {
@@ -142,17 +143,17 @@ func (ds *DatabaseService) SubmitRanking(voterID, week int, teams []int) error {
 	}
 	defer tx.Rollback()
 
-	// Delete existing votes for this voter and week
-	_, err = tx.Exec("DELETE FROM votes WHERE voter_id = $1 AND week = $2", voterID, week)
+	// Delete existing votes for this voter and poll period
+	_, err = tx.Exec("DELETE FROM votes WHERE voter_id = $1 AND poll_period_id = $2", voterID, pollPeriodID)
 	if err != nil {
 		return fmt.Errorf("failed to delete existing votes: %v", err)
 	}
 
 	// Insert new votes
-	for rank, teamID := range teams {
-		_, err = tx.Exec(`INSERT INTO votes (voter_id, team_id, rank, week, created_at) 
+	for rankPosition, teamID := range teams {
+		_, err = tx.Exec(`INSERT INTO votes (voter_id, team_id, poll_period_id, rank_position, created_at) 
 						  VALUES ($1, $2, $3, $4, $5)`,
-			voterID, teamID, rank+1, week, time.Now())
+			voterID, teamID, pollPeriodID, rankPosition+1, time.Now())
 		if err != nil {
 			return fmt.Errorf("failed to insert vote: %v", err)
 		}
@@ -167,16 +168,16 @@ func (ds *DatabaseService) SubmitRanking(voterID, week int, teams []int) error {
 	return ds.loadVotes()
 }
 
-func (ds *DatabaseService) CalculateRankings(week int) []RankingResponse {
+func (ds *DatabaseService) CalculateRankings(pollPeriodID int) []RankingResponse {
 	teamPoints := make(map[int]int)
 	teamFirstVotes := make(map[int]int)
 
 	for _, vote := range ds.votes {
-		if vote.Week == week {
-			points := max(0, 26-vote.Rank)
+		if vote.PollPeriodID == pollPeriodID {
+			points := max(0, 26-vote.RankPosition)
 			teamPoints[vote.TeamID] += points
 
-			if vote.Rank == 1 {
+			if vote.RankPosition == 1 {
 				teamFirstVotes[vote.TeamID]++
 			}
 		}

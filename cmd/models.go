@@ -9,12 +9,12 @@ type Team struct {
 }
 
 type Vote struct {
-	ID       int       `json:"id"`
-	VoterID  int       `json:"voter_id"`
-	TeamID   int       `json:"team_id"`
-	Rank     int       `json:"rank"`
-	Week     int       `json:"week"`
-	CreateAt time.Time `json:"created_at"`
+	ID           int       `json:"id"`
+	VoterID      int       `json:"voter_id"`
+	TeamID       int       `json:"team_id"`
+	PollPeriodID int       `json:"poll_period_id"`
+	RankPosition int       `json:"rank_position"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type Voter struct {
@@ -43,5 +43,5 @@ type RankingResponse struct {
 type CreateVoterRequest struct {
 	Name  string `json:"name" binding:"required"`
 	Email string `json:"email" binding:"required,email"`
-	Role  string `json:"role" binding:"required"`
+	Role  string `json:"role"` // Optional since DB has default value
 }

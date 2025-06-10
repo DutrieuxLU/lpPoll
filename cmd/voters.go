@@ -40,7 +40,13 @@ func CreateVoter(dbService *DatabaseService) gin.HandlerFunc {
 			}
 		}
 
-		voter, err := dbService.CreateVoter(request.Name, request.Email, request.Role)
+		// Use default role if not provided
+		role := request.Role
+		if role == "" {
+			role = "voter" // Match the database default
+		}
+
+		voter, err := dbService.CreateVoter(request.Name, request.Email, role)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":   "Failed to create voter",
