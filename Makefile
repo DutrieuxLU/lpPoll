@@ -1,3 +1,5 @@
+build:
+	go build 
 push: 
 	git add . 
 	git commit -m "additions"
