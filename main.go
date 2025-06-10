@@ -70,7 +70,7 @@ func main() {
 	cmd.SetupRoutes(api, dbService)
 
 	// Start server
-	err = r.Run(":8080")
+	err = r.Run(":31022")
 	if err != nil {
 		log.Fatal("Local server couldn't start: ", err)
 	}
