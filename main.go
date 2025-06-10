@@ -1,94 +1,31 @@
+// main.go
 package main
 
 import (
 	"database/sql"
 	"fmt"
 	"log"
-	"net/http"
-	"strconv"
-	"time"
+
+	"lpPoll/cmd"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 )
 
-type Team struct {
-	ID     int    `json:"id"`
-	Name   string `json:"name"`
-	Region string `json:"region"`
-}
-
-type Vote struct {
-	ID       int       `json:"id"`
-	VoterID  int       `json:"voter_id"`
-	TeamID   int       `json:"team_id"`
-	Rank     int       `json:"rank"`
-	Week     int       `json:"week"`
-	CreateAt time.Time `json:"created_at"`
-}
-
-type RankingSubmission struct {
-	VoterID int   `json:"voter_id" binding:"required"`
-	Week    int   `json:"week" binding:"required"`
-	Teams   []int `json:"teams" binding:"required"`
-}
-
-type RankingResponse struct {
-	TeamID     int    `json:"team_id"`
-	TeamName   string `json:"team_name"`
-	Rank       int    `json:"rank"`
-	Points     int    `json:"points"`
-	FirstVotes int    `json:"first_votes"`
-}
-
-// Mock data for development
-
-var (
-	votes []Vote
-	teams []Team
-	db    *sql.DB
-)
-
 const (
 	host     = "lppoll-freedb.cz4oskg6qyk9.us-east-2.rds.amazonaws.com"
 	port     = 5432
-	user     = "postgres"        // Default PostgreSQL user
-	password = "Fisher2019,PULL" // The password you set
-	dbname   = "postgres"        // Default database, or your specific database
+	user     = "postgres"
+	password = "Fisher2019,PULL"
+	dbname   = "postgres"
 )
 
-func loadFromDB() error {
-	// Load teams
-	rows, err := db.Query("SELECT id, name, region FROM teams ORDER BY name")
-	if err != nil {
-		return fmt.Errorf("failed to query teams: %v", err)
-	}
-	defer rows.Close()
-
-	teams = []Team{} // Clear existing teams
-	for rows.Next() {
-		var team Team
-		if err = rows.Scan(&team.ID, &team.Name, &team.Region); err != nil {
-			return fmt.Errorf("failed to scan team: %v", err)
-		}
-		teams = append(teams, team)
-	}
-
-	if err = rows.Err(); err != nil {
-		return fmt.Errorf("error iterating teams: %v", err)
-	}
-
-	log.Printf("Loaded %d teams and %d votes from database", len(teams), len(votes))
-	return nil
-}
-
 func main() {
-	var err error
+	// Initialize database connection
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=require",
 		host, port, user, password, dbname)
 
-	// Open a connection
-	db, err = sql.Open("postgres", psqlInfo)
+	db, err := sql.Open("postgres", psqlInfo)
 	if err != nil {
 		log.Fatal("Failed to open a DB connection: ", err)
 	}
@@ -101,16 +38,20 @@ func main() {
 	}
 
 	fmt.Println("Successfully connected to PostgreSQL!")
-	if len(teams) == 0 {
-		err = loadFromDB()
-		if err != nil {
-			log.Fatal("UNABLE TO LOAD FROM REMOTE DB", err)
-		}
+
+	// Initialize the database service
+	dbService := cmd.NewDatabaseService(db)
+
+	// Load initial data from database
+	err = dbService.LoadFromDB()
+	if err != nil {
+		log.Fatal("UNABLE TO LOAD FROM REMOTE DB: ", err)
 	}
+
 	// Create Gin router
 	r := gin.Default()
 
-	// Middleware for CORS (if you plan to have a frontend)
+	// Setup CORS middleware
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
@@ -124,167 +65,13 @@ func main() {
 		c.Next()
 	})
 
-	// API routes
+	// Setup API routes
 	api := r.Group("/api/v1")
-	{
-		api.GET("/health", healthCheck)
-		api.GET("/teams", getTeams)
-		api.POST("/rankings", submitRanking)
-		api.GET("/rankings", getRankings)
-		api.GET("/rankings/week/:week", getRankingsByWeek)
-	}
+	cmd.SetupRoutes(api, dbService)
 
+	// Start server
 	err = r.Run(":8080")
 	if err != nil {
-		log.Fatal("Local server couldn't start")
+		log.Fatal("Local server couldn't start: ", err)
 	}
-}
-
-// Health check endpoint
-func healthCheck(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"status":    "healthy",
-		"timestamp": time.Now(),
-		"service":   "lol-rankings-api",
-	})
-}
-
-func getTeams(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"teams": teams,
-		"count": len(teams),
-	})
-}
-
-func submitRanking(c *gin.Context) {
-	var submission RankingSubmission
-
-	if err := c.ShouldBindJSON(&submission); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid request format",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	if len(submission.Teams) == 0 || len(submission.Teams) > len(teams) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid number of teams in ranking",
-		})
-		return
-	}
-
-	// Clear existing votes for this voter and week
-	votes = removeVotes(votes, submission.VoterID, submission.Week)
-
-	for rank, teamID := range submission.Teams {
-		vote := Vote{
-			ID:       len(votes) + 1,
-			VoterID:  submission.VoterID,
-			TeamID:   teamID,
-			Rank:     rank + 1, // 1-indexed
-			Week:     submission.Week,
-			CreateAt: time.Now(),
-		}
-		votes = append(votes, vote)
-	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"message":      "Ranking submitted successfully",
-		"voter_id":     submission.VoterID,
-		"week":         submission.Week,
-		"teams_ranked": len(submission.Teams),
-	})
-}
-
-// Get current rankings (aggregate)
-func getRankings(c *gin.Context) {
-	// Get week parameter or default to current week
-	weekStr := c.DefaultQuery("week", "1")
-	week, err := strconv.Atoi(weekStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid week parameter"})
-		return
-	}
-
-	rankings := calculateRankings(week)
-
-	c.JSON(http.StatusOK, gin.H{
-		"week":       week,
-		"rankings":   rankings,
-		"updated_at": time.Now(),
-	})
-}
-
-// Get rankings for specific week
-func getRankingsByWeek(c *gin.Context) {
-	weekStr := c.Param("week")
-	week, err := strconv.Atoi(weekStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid week parameter"})
-		return
-	}
-
-	rankings := calculateRankings(week)
-
-	c.JSON(http.StatusOK, gin.H{
-		"week":       week,
-		"rankings":   rankings,
-		"updated_at": time.Now(),
-	})
-}
-
-func calculateRankings(week int) []RankingResponse {
-	teamPoints := make(map[int]int)
-	teamFirstVotes := make(map[int]int)
-
-	for _, vote := range votes {
-		if vote.Week == week {
-			points := max(0, 26-vote.Rank)
-			teamPoints[vote.TeamID] += points
-
-			if vote.Rank == 1 {
-				teamFirstVotes[vote.TeamID]++
-			}
-		}
-	}
-
-	// Convert to response format and sort
-	var rankings []RankingResponse
-	for _, team := range teams {
-		if points, exists := teamPoints[team.ID]; exists {
-			rankings = append(rankings, RankingResponse{
-				TeamID:     team.ID,
-				TeamName:   team.Name,
-				Points:     points,
-				FirstVotes: teamFirstVotes[team.ID],
-			})
-		}
-	}
-
-	for i := 0; i < len(rankings)-1; i++ {
-		for j := i + 1; j < len(rankings); j++ {
-			if rankings[j].Points > rankings[i].Points {
-				rankings[i], rankings[j] = rankings[j], rankings[i]
-			}
-		}
-	}
-
-	for i := range rankings {
-		rankings[i].Rank = i + 1
-	}
-
-	return rankings
-}
-
-// Helper function to remove existing votes
-func removeVotes(allVotes []Vote, voterID, week int) []Vote {
-	return nil
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
