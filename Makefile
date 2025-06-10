@@ -3,5 +3,4 @@ push:
 	git commit -m "additions"
 	git push
 test:
-	cd tests
-	./endpoints.sh
+	./tests/endpoints.sh
